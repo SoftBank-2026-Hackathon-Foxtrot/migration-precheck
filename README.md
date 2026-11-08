@@ -33,6 +33,24 @@ python3 -m precheck fix --apply    # 고친 뒤 다시 확인
   - `probes/redis.py`: redis-migrator `statemig`. 양쪽 Redis 키 수와 proxy의 active 백엔드.
   - `probes/cp.py`: control-plane `server`. 로드된 seed와 끝나지 않은 워크플로.
 
+## 강제 초기화 (`reset`)
+
+데이터가 대상 쪽에 있어도 시연 준비 상태를 바로 만듭니다. 마이그레이션을 돌리지 않고 각 라우터의 기록을 원본으로 되돌리므로, **cutover 뒤 대상에 쓰인 데이터는 사라집니다.** 원본에는 cutover 직전 데이터가 남아 있습니다.
+
+```bash
+python3 -m precheck reset            # 할 일만 표시
+python3 -m precheck reset --apply    # 실행 후 다시 check
+```
+
+1. 열린 워크플로를 ABORT하고, 컨트롤플레인이 앱에 주는 객체 마이그레이션 ID를 지웁니다.
+2. 양쪽 `fxt_*` 복제 객체를 지우고, 원본 app 롤은 LOGIN, 대상은 NOLOGIN으로 바꿉니다. DB adaptor의 저장된 경로를 원본으로 바꾸고 db-proxy를 재시작합니다. 재시작하면서 그 경로를 PgBouncer에 다시 적용합니다.
+3. Redis proxy의 제어 기록(EFS `/state/control.json`)을 원본으로 바꾸고 redis-proxy를 재시작합니다.
+4. 앱 컨테이너의 `/tmp/object-migration-id`를 지웁니다(AWS는 SSM, GCP는 VM reset). 양쪽 버킷의 change feed와 `om-*` 큐·토픽·구독도 지웁니다.
+5. LB 가중치를 원본 1, 대상 0으로 바꿉니다.
+6. 대상 DB TRUNCATE, 대상 Redis FLUSHALL, 대상 버킷의 객체를 전부 지웁니다. PgBouncer가 원본을 가리키는 것을 확인한 뒤에만 합니다.
+
+단계마다 다시 돌려도 같은 결과가 나오므로, 중간에 실패하면 그대로 다시 실행하면 됩니다. db-proxy와 redis-proxy를 재시작하는 동안 앱이 1~2분 멈춥니다.
+
 ## 무엇을 자동으로 고치나
 
 | 고침 | 조건 (하나라도 아니면 거부하고 수동 안내) |

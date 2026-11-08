@@ -66,6 +66,28 @@ def _keys(r):
 def run(params):
     out = {"redis": {}, "proxy": None, "fixed": [], "errors": []}
     endpoints = dict(item.split("=", 1) for item in os.environ.get("STATEMIG_ENDPOINTS", "").split(",") if "=" in item)
+
+    # Reset only: rewrite the proxy's control record (shared EFS file) to serve one backend. The
+    # proxy starts from this record, so it takes effect when redis-proxy restarts.
+    if params.get("active_to"):
+        path = os.environ.get("STATEMIG_CONTROL_FILE", "/state/control.json")
+        try:
+            want = params["active_to"]
+            if want not in endpoints:
+                raise RuntimeError(f"{want} is not in STATEMIG_ENDPOINTS")
+            try:
+                with open(path) as f:
+                    rec = json.load(f)
+            except FileNotFoundError:
+                rec = {"gen": 0}
+            new = {"gen": int(rec.get("gen", 0)) + 1, "active": want, "consume": want, "paused": False}
+            tmp = f"{path}.precheck"
+            with open(tmp, "w") as f:
+                json.dump(new, f)
+            os.replace(tmp, path)
+            out["fixed"].append(f"control record: {rec} -> {new} (applies on redis-proxy restart)")
+        except Exception as exc:  # noqa: BLE001
+            out["errors"].append(f"control record: {exc}")
     try:
         req = urllib.request.Request(os.environ["STATEMIG_PROXY"].rstrip("/") + "/status",
                                      headers={"Authorization": "Bearer " + os.environ["STATEMIG_ADMIN_TOKEN"]})

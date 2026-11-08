@@ -115,6 +115,12 @@ class Judge:
                      fix=Fix("cp_abort", {"ids": abortable}, f"ABORT {', '.join(abortable)}") if abortable else None,
                      manual="" if abortable == [w["id"] for w in open_] else "a running workflow: HALT it from the console first")
             self.seed(cp.get("seed") or {})
+            hold = cp.get("hold")
+            if hold is not None:
+                self.add("cp.object_route", "platform", not hold.get("object_migration_id"),
+                         "apps follow no object migration (they use their own bucket)",
+                         f"control plane hands out {hold.get('object_migration_id')}",
+                         manual="`reset --apply` clears it (apps then use their own bucket)")
 
         lb = self.facts.get("lb")
         if lb:

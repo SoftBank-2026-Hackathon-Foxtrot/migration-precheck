@@ -37,6 +37,22 @@ async def _main(params):
 
     platform = build_platform(settings)
     repo, workflows = platform.context.repo, platform.context.workflows
+
+    # Reset only: stop handing apps the last object migration. Apps keep following the ID they
+    # were given (and its final route) until it is cleared here and from their ID file.
+    if params.get("clear_object_migration"):
+        try:
+            hold, version = await repo.hold(seed.scope)
+            if hold.object_migration_id:
+                await repo.save_hold(hold.model_copy(update={"object_migration_id": None}), expected_version=version)
+                out["fixed"].append(f"hold: object migration {hold.object_migration_id} cleared")
+        except Exception as exc:  # noqa: BLE001
+            out["errors"].append(f"hold: {exc}")
+    try:
+        hold, _ = await repo.hold(seed.scope)
+        out["hold"] = {"desired": hold.desired.value, "object_migration_id": hold.object_migration_id}
+    except Exception as exc:  # noqa: BLE001
+        out["errors"].append(f"hold read: {exc}")
     for wid in await repo.workflow_ids():
         w = await repo.workflow(wid)
         if w is None or w.status.value in ("COMPLETED", "ABORTED"):

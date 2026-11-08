@@ -3,6 +3,9 @@
   python -m precheck check            read-only; exit 1 when anything FAILs
   python -m precheck fix              show what `fix --apply` would change
   python -m precheck fix --apply      apply the fixes, then check again
+  python -m precheck reset            show what `reset --apply` would do
+  python -m precheck reset --apply    force the demo-ready state (loses what the app wrote on
+                                      the target), then check again
 """
 
 from __future__ import annotations
@@ -16,6 +19,7 @@ from pathlib import Path
 from .collect import Collector, clouds_for
 from .config import Config
 from .fixes import apply_local, probe_fixes
+from .reset import Reset, plan
 from .rules import FAIL, PASS, WARN, Result, judge
 
 ICON = {PASS: "✓", WARN: "!", FAIL: "✗"}
@@ -47,7 +51,7 @@ def report(results: list[Result], *, verbose: bool) -> None:
 def main(argv: list[str] | None = None) -> int:
     default_cfg = Path(__file__).resolve().parent.parent / "config" / "chiikawa.toml"
     ap = argparse.ArgumentParser(prog="precheck", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("command", choices=["check", "fix"])
+    ap.add_argument("command", choices=["check", "fix", "reset"])
     ap.add_argument("-c", "--config", default=str(default_cfg))
     ap.add_argument("--apply", action="store_true", help="fix: change the resources (default: only show the plan)")
     ap.add_argument("--force", action="store_true", help="fix: also delete target objects the source does not have")
@@ -59,6 +63,16 @@ def main(argv: list[str] | None = None) -> int:
     clouds = clouds_for(cfg)
     log = (lambda m: print(m, file=sys.stderr)) if not args.json else (lambda _m: None)
     print(f"{cfg.application}: {cfg.source.env} (source) -> {cfg.target.env} (target)", file=sys.stderr)
+
+    if args.command == "reset":
+        if not args.apply:
+            print("reset --apply would (whatever the app wrote on the target is lost):")
+            for i, step in enumerate(plan(cfg), 1):
+                print(f"  {i}. {step}")
+            return 0
+        log("resetting to the demo-ready state:")
+        Reset(cfg, clouds, log).run()
+        log("reset done; checking")
 
     facts = Collector(cfg, clouds, log=lambda m: log(f"  {m}")).collect()
     results = judge(cfg, facts)
