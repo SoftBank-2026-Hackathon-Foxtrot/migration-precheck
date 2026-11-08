@@ -1,0 +1,72 @@
+# Demo-ready state of the chiikawa user app before an AWS -> GCP migration.
+#
+# source: holds every user-app resource and all its data, serves all traffic.
+# target: only the resources created ahead of the migration exist there (VM, Cloud SQL with the
+#         schema, Memorystore, bucket), and they hold no data and no leftovers of earlier runs.
+
+application = "chiikawa"
+scope = "scope:chiikawa"
+
+[cli]
+aws_profile = "foxtrot"
+gcloud_configuration = "foxtrot"
+
+[platform]
+region = "ap-northeast-2"
+cluster = "foxtrot-platform"
+services = [
+  "console", "control-plane", "db-proxy", "object-migration", "otel-collector",
+  "provisioner", "redis-migrator", "redis-proxy", "redis-syncworker", "traffic",
+]
+cloudflare_token_secret = "foxtrot/platform/cloudflare-api-token"
+cloudflare_account = "3d6694c353d2e0519e3215805b763743"
+cloudflare_zone = "a347c7267257bd2d1b3fe35d0d62ac72"
+load_balancer = "6bf4a03e3d63cb3da4a19e6d0c69a606"
+tailscale_token_secret = "foxtrot/platform/tailscale-api-token"
+tailscale_gateway = "foxtrot-platform-gw"
+# PgBouncer database entry the app connects to (db-proxy.internal:6432/<name>).
+pgbouncer_database = "chiikawa"
+
+[database]
+writer_role = "app"
+tables = [
+  "public.chat_messages", "public.groupbuys", "public.join_requests",
+  "public.notifications", "public.orders", "public.stats",
+]
+
+[source]
+env = "aws"
+cloud = "aws"
+vm_name = "chiikawa-aws-3e3d"
+app_port = 8000
+tailscale_host = "chiikawa-aws-3e3d"
+routes = ["10.10.0.0/16"]
+db_ref = "db:chiikawa-aws-3e3d"
+db_secret = "foxtrot/app/chiikawa-aws-3e3d/db-operator"
+db_instance = "chiikawa-aws-3e3d-db"
+redis_name = "aws"                      # key in STATEMIG_ENDPOINTS, seed ref resource:<name>
+redis_instance = "chiikawa-aws-3e3d-cache"
+object_ref = "resource:aws-receipts"
+bucket = "foxtrot-chiikawa-aws-3e3d"
+lb_pool = "b26f0a79ed2d63568022f5b0ffd2b00d"
+tunnel = "6988cdcf-a206-4c88-9441-590e81a2bb61"
+
+[target]
+env = "gcp"
+cloud = "gcp"
+project = "foxtrot-513413"
+region = "asia-northeast3"
+zone = "asia-northeast3-a"
+vm_name = "chiikawa-gcp-1975"
+app_port = 8000
+tailscale_host = "chiikawa-gcp-1975"
+routes = ["10.20.0.0/24", "10.21.0.0/16"]
+db_ref = "db:chiikawa-gcp-1975"
+db_secret = "foxtrot/app/chiikawa-gcp-1975/db-operator"
+db_instance = "chiikawa-gcp-1975-db"
+redis_name = "gcp"
+redis_instance = "chiikawa-gcp-1975-cache"
+object_ref = "resource:gcp-receipts"
+bucket = "foxtrot-chiikawa-gcp-1975"
+lb_pool = "c02ba1a4acbbbb702fd2f67d6b6dc6a4"
+tunnel = "3f67d63d-0a91-43ed-8090-c276563a6bc7"

@@ -1,0 +1,19 @@
+[project]
+name = "migration-precheck"
+version = "0.1.0"
+description = "Check (and safely restore) the demo-ready state of a user app before a migration"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.scripts]
+precheck = "precheck.__main__:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["precheck*"]
+
+[tool.setuptools.package-data]
+precheck = ["probes/*.py"]
