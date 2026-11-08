@@ -36,7 +36,7 @@ def ready_facts() -> dict:
                    "pgbouncer": {"host": "rds", "ip": "10.10.11.118", "paused": 0, "disabled": 0},
                    "apps": {"source": {"status": 200}, "target": {"status": 200}}, "fixed": [], "errors": []},
             "redis": {"redis": {"aws": {"keys": 5, "ping": "PONG"}, "gcp": {"keys": 0, "ping": "PONG"}},
-                      "proxy": {"active": "aws", "paused": False}, "fixed": [], "errors": []},
+                      "proxy": {"endpoints": [], "proxy": {"active": "aws", "paused": False}}, "fixed": [], "errors": []},
             "cp": {"seed": {"environments": {
                        "aws": {"appUrl": "http://10.10.0.132:8000", "resources": CFG.source.resource_refs},
                        "gcp": {"appUrl": "http://10.20.0.2:8000", "resources": CFG.target.resource_refs}},
@@ -77,7 +77,7 @@ class Guards(unittest.TestCase):
     def live_on_target(self):
         f = ready_facts()
         f["probes"]["db"]["pgbouncer"]["ip"] = "10.21.0.3"
-        f["probes"]["redis"]["proxy"]["active"] = "gcp"
+        f["probes"]["redis"]["proxy"]["proxy"]["active"] = "gcp"
         f["probes"]["db"]["databases"]["target"]["tables"] = {t: 100 for t in TABLES}
         f["probes"]["db"]["databases"]["target"]["role_login"] = True
         f["probes"]["db"]["databases"]["target"]["publications"] = ["fxt_abc_f"]

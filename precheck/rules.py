@@ -64,6 +64,10 @@ class Judge:
         running = [i for i in (self.side(role).get("vm") or {}).get("instances", []) if i.get("state") == "running"]
         return running[0]["ip"] if len(running) == 1 else None
 
+    def proxy(self) -> dict[str, Any]:
+        status = (self.probe("redis") or {}).get("proxy") or {}
+        return status.get("proxy", status)   # GET /status nests the routing state under "proxy"
+
     def no_unfinished_workflow(self) -> bool:
         cp = self.probe("cp")
         return cp is not None and not cp.get("workflows")
@@ -73,7 +77,7 @@ class Judge:
         db, redis = self.probe("db") or {}, self.probe("redis") or {}
         src = (db.get("databases") or {}).get("source") or {}
         route = (db.get("pgbouncer") or {}).get("ip")
-        active = (redis.get("proxy") or {}).get("active")
+        active = self.proxy().get("active")
         return bool(route) and route == src.get("ip") and active == self.cfg.source.redis_name
 
     # ---- rules ---------------------------------------------------------------------------------
@@ -157,6 +161,8 @@ class Judge:
                 continue
             ip = self.vm_ip(role)
             host = urlparse(env["appUrl"]).hostname
+            if ip is None and not (self.side(role).get("vm") or {}).get("instances"):
+                continue  # the VM could not be read; its own check reports that
             self.add(f"seed.appurl.{role}", "platform", ip is not None and host == ip,
                      f"seed appUrl of {s.env} is the VM's address", f"seed {env['appUrl']}, VM {ip}",
                      manual=f"set environments.{s.env}.appUrl to http://{ip}:{s.app_port} and redeploy the control plane")
@@ -268,7 +274,7 @@ class Judge:
         r = self.probe("redis")
         if not r:
             return
-        proxy = r.get("proxy") or {}
+        proxy = self.proxy()
         self.add("redis.proxy", "source", proxy.get("active") == cfg.source.redis_name and not proxy.get("paused"),
                  "Redis proxy sends the app to the source", f"active={proxy.get('active')} paused={proxy.get('paused')}",
                  manual="the app uses another Redis: finish or roll back the last migration first")
