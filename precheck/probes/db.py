@@ -103,21 +103,30 @@ def run(params):
             runtime, settings = RuntimeSettings(), Settings()
             service = Service(settings)
             want = params["route_to"]
-            if want not in service.registry.databases:
-                raise RuntimeError(f"{want} is not in the registry ({sorted(service.registry.databases)})")
+            alias = params["pgbouncer_database"]
 
             def update(tx):
-                row = tx.get("ROUTE", runtime.binding_ref)
+                if service.registry.bindings:
+                    # Static mode: one binding from the registry file.
+                    if want not in service.registry.databases:
+                        raise RuntimeError(f"{want} is not in the registry")
+                    key = runtime.binding_ref
+                else:
+                    # Dynamic mode (bindings registered over the API): find the app's binding.
+                    rows = [r for r in tx.list("BINDING") if r.get("alias") == alias]
+                    if len(rows) != 1:
+                        raise RuntimeError(f"{len(rows)} bindings with alias {alias}")
+                    key = rows[0]["bindingId"]
+                    service.bindings.resource(tx, want)   # raises if the database is not registered
+                row = tx.get("ROUTE", key)
                 if row is None:
-                    raise RuntimeError(f"no stored route for {runtime.binding_ref}")
+                    raise RuntimeError(f"no stored route for {key}")
                 before = row["database_ref"]
-                row = {**row, "database_ref": want, "access": "OPEN",
-                       "updated_at": now()}
-                tx.put("ROUTE", runtime.binding_ref, row)
-                return before
+                tx.put("ROUTE", key, {**row, "database_ref": want, "access": "OPEN", "updated_at": now()})
+                return key, before
 
-            before = service.store.transact(update)
-            out["fixed"].append(f"route of {runtime.binding_ref}: {before} -> {want} (applies on db-proxy restart)")
+            key, before = service.store.transact(update)
+            out["fixed"].append(f"route of {key}: {before} -> {want} (applies on db-proxy restart)")
         except Exception as exc:  # noqa: BLE001
             out["errors"].append(f"route: {exc}")
 
